@@ -4,7 +4,7 @@ const { AuthApiClient, KnownAuthStatusCode } = require('node-kakao');
 const readline = require('readline');
 
 const config = require('./kakao.json');
-const { email, uuid, mp_email, mp_uuid, bypass_multiprofile } = config;
+const { email, uuid, mp_email, mp_uuid, force_real_profile } = config;
 const password = Buffer.from(config.password, 'base64') + '';
 const mp_password = Buffer.from(config.mp_password, 'base64') + '';
 const compname = '브릿지';
@@ -42,5 +42,5 @@ async function reg(email, password, name, uuid) {
 
 (async function() {
 	await reg(email, password, compname, uuid);
-	await reg(mp_email, mp_password, mp_compname, mp_uuid);
+	if(config.force_real_profile) await reg(mp_email, mp_password, mp_compname, mp_uuid);
 })();
