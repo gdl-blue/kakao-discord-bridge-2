@@ -6,6 +6,7 @@
 ## 쓰는 방법
 - 도스창을 켜고 `npm i node-kakao`, `npm i discord.js@11.6.3`을 차례로 친다.
 - [이 모듈](https://github.com/gdl-blue/discord.js-v11-reborn)을 내려받아 node_modules에 djs11 디렉토리를 만들어서 거기에 저장한다.
+- 디스코드 봇을 하나 만든다.
 - kakao.json을 만든다.
 ```json
 {
@@ -38,3 +39,7 @@
    * allowed_senders: { (디스코드 채널 ID): [메시지를 보낼 수 있는 디스코드 유저 ID 1, ...]
 - kakao_register.js를 실행한다.
 - kakao.js를 실행한다.
+
+## 참고
+- 8MB 이하의 사진, 비디오 등은 디스코드에 업로드된다. (즉, 기간 만료가 없다. 8MB보다 큰 화일은 링크 형태로 디스코드에 올라오며 카카오톡에서 화일이 만료되면 더 이상 내려받을 수 없다.)
+- 정적 이모티콘은 디스코드 방식 이모지로 바뀌어 올라온다.
