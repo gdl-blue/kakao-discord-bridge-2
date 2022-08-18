@@ -1,6 +1,8 @@
 # kakao-discord-bridge-2
 카카오톡 메시지를 디스코드에서 주고받에 해주는 프로그램
 
+** 본계정 말고 부계정 사용을 권장한다.**
+
 ## 쓰는 방법
 - 도스창을 켜고 `npm i node-kakao`, `npm i discord.js@11.6.3`을 차례로 친다.
 - [이 모듈](https://github.com/gdl-blue/discord.js-v11-reborn)을 내려받아 node_modules에 djs11 디렉토리를 만들어서 거기에 저장한다.
