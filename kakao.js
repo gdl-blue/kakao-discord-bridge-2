@@ -235,13 +235,17 @@ kakao.on('chat', async (data, channel) => {
 	var msg = data.text || '', shmsg = msg;
 	var filecfg = {};
 	var emoji = null;
+	
+	// 일반 첨부파일
 	if(data._chat.attachment && data._chat.attachment.url)
-		if(data._chat.attachment.s >= 7999999) {
+		// 8MB 이상은 링크로 올리기
+		if(data._chat.attachment.s >= 7999998)
 			msg += ' [첨부파일: ' + data._chat.attachment.url + ' ]';
-		} else {
+		else
 			msg = '',
 			filecfg = { files: [data._chat.attachment.url] };
-		}
+	
+	// 묶음사진
 	if(data._chat.attachment && data._chat.attachment.imageUrls) {
 		msg = '';
 		var n = 1;
@@ -250,7 +254,10 @@ kakao.on('chat', async (data, channel) => {
 			msg += `[사진 #${n++}: ${img}]\n`;
 			// filecfg.files.push(img);
 	}
+	
+	// 이모티콘
 	if(data._chat.attachment && (data._chat.type == 25 || data._chat.type == 20 || data._chat.type == 12)) {
+		// 움직이는 이모티콘 파싱불가
 		const url = api.serviceApiUtil.getEmoticonImageURL(data._chat.attachment.path);
 		if(!url || data._chat.attachment.type == 'image/webp' || data._chat.attachment.path.endsWith('.webp'))
 			{ if(!msg) msg += '(' + (data._chat.attachment.alt || '이모티콘') + ')'; }
@@ -258,12 +265,105 @@ kakao.on('chat', async (data, channel) => {
 			// msg += '\n[' + (data._chat.attachment.alt || '이모티콘') + ' - ' + url + ']';
 			// filecfg.files = [url];
 			emoji = await bridge.guilds.get(client(channel.channelId).guildID).createEmoji(url, 'kakaoet' + (new Date().getTime()));
-			msg = `<:${emoji.name}:${emoji.id}> ${msg}`;
+			if(!emoji) msg += ' [' + (data._chat.attachment.alt || '이모티콘') + ']';
+			else msg = `<:${emoji.name}:${emoji.id}> ${msg}`;
 		if(!data.text) shmsg += '(이모티콘)';
 	}
+	
+	// 답장
 	if(data._chat.type == 26)
 		msg = '```' + (users[data._chat.attachment.src_userId].nickname || users[data._chat.attachment.src_userId].nickName) + '에게 답장: \n ' + data._chat.attachment.src_message.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, ' ') + '```   ' + msg,
 		shmsg = '[답장] ' + shmsg;
+	
+	// 샾검색
+	if(data._chat.type == 71) {
+		msg = '';
+		filecfg.embed = {
+			color: 0x5c4b43,
+			title: '[#] ' + data._chat.attachment.C.HD.TD.T,
+			fields: [],
+		};
+		if(data._chat.attachment.C.ITL)
+		for(var item of data._chat.attachment.C.ITL) {
+			filecfg.embed.fields.push({
+				name: item.TD.T,
+				value: item.TD.D + '... [[바로가기]](' + item.L.LPC + ')',
+			});
+		}
+		if(data._chat.attachment.C.THL)
+		for(var item of data._chat.attachment.C.THL) {
+			filecfg.embed.fields.push({
+				name: data._chat.attachment.C.HD.TD.T,
+				value: '[[보기]](' + item.L.LPC + ')',
+			});
+		}
+		if(data._chat.attachment.C.HD.L && data._chat.attachment.C.HD.L.LPC) {
+			filecfg.embed.fields.push({
+				name: data._chat.attachment.C.HD.TD.T,
+				value: '**[[검색 결과 더보기]](' + data._chat.attachment.C.HD.L.LPC + ')**',
+			});
+		}
+		else if(data._chat.attachment.P && data._chat.attachment.P.L) {
+			filecfg.embed.fields.push({
+				name: '기타',
+				value: '**[[검색 결과 더보기]](' + data._chat.attachment.P.L.LPC + ')**',
+			});
+		}
+	}
+	
+	// 공지 및 게시글
+	if(data._chat.type == 24) {
+		if(data._chat.attachment.os && data._chat.attachment.os[0].t == 1 && data._chat.attachment.os[0].ct) {
+			msg = '';
+			filecfg.embed = {
+				color: 0x5c4b43,
+				title: '새 글',
+				description: data._chat.attachment.os[0].ct,
+			};
+		}
+		
+		// 공지글
+		if(data._chat.attachment.os && data._chat.attachment.os[0].t == 3 && data._chat.attachment.os[1].t == 1) {
+			msg = '';
+			filecfg.embed = {
+				color: 0x5c4b43,
+				title: '[공지] 새 글',
+				description: data._chat.attachment.os[1].ct,
+			};
+		}
+		
+		// 공지투표
+		if(data._chat.attachment.os && data._chat.attachment.os[1] && data._chat.attachment.os[1].its) {
+			msg = '';
+			filecfg.embed = {
+				color: 0x5c4b43,
+				title: '[공지] 투표: ' + data._chat.attachment.os[1].tt,
+				fields: [],
+			};
+			for(var item of data._chat.attachment.os[1].its) {
+				filecfg.embed.fields.push({
+					name: item.tt,
+					value: '*',
+				});
+			}
+		}
+	}
+	
+	// 투표
+	if(data._chat.type == 14 && data._chat.attachment.os && data._chat.attachment.os[0]) {
+		msg = '';
+		filecfg.embed = {
+			color: 0x5c4b43,
+			title: '투표: ' + data._chat.attachment.title,
+			fields: [],
+		};
+		for(var item of data._chat.attachment.os[0].its) {
+			filecfg.embed.fields.push({
+				name: item.tt,
+				value: '*',
+			});
+		}
+	}
 	
 	client(channel.channelId).send(msg, Object.assign({
 		username: filter(nick),
@@ -457,8 +557,7 @@ kakao.on('host_handover', (channel) => {
 						whmsg: msg,
 					});
 					
-					var dc = data.chat;
-					chats.set(msg.id, dc);
+					chats.set(msg.id, chat);
 				});
 				
 				lastID[channel.channelId + ''] = chat.logId;
