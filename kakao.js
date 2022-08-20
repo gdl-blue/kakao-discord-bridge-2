@@ -527,7 +527,7 @@ bridge.on('message', async msg => {
 				if(post.content)
 					for(var item of JSON.parse(post.content))
 						if(item.type == 'text')
-							title = strip(item.text, 32);
+							title = strip(item.text.replace(/(\r|\n)/g, ' '), 32);
 				if(post.poll)
 					title = post.poll.subject;
 				
@@ -559,7 +559,7 @@ bridge.on('message', async msg => {
 				if(post.content)
 					for(var item of JSON.parse(post.content))
 						if(item.type == 'text')
-							title = strip(item.text, 32);
+							title = strip(item.text.replace(/(\r|\n)/g, ' '), 32);
 				if(post.poll)
 					title = post.poll.subject;
 				
@@ -591,7 +591,7 @@ bridge.on('message', async msg => {
 				if(post.content)
 					for(var item of JSON.parse(post.content))
 						if(item.type == 'text')
-							title = strip(item.text, 32);
+							title = strip(item.text.replace(/(\r|\n)/g, ' '), 32);
 				if(post.poll)
 					title = post.poll.subject;
 				
@@ -623,7 +623,7 @@ bridge.on('message', async msg => {
 				if(post.content)
 					for(var item of JSON.parse(post.content))
 						if(item.type == 'text')
-							title = strip(item.text, 32);
+							title = strip(item.text.replace(/(\r|\n)/g, ' '), 32);
 				if(post.poll)
 					title = post.poll.subject;
 				
@@ -638,7 +638,7 @@ bridge.on('message', async msg => {
 			if(['OD', 'OM'].includes(kch._channel.info.type))
 				return msg.channel.send(err('오픈채팅은 게시판 기능을 지원하지 않습니다'));
 			if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id)))
-				return msg.channel.send(err('공지를 등록하는 것이 허용되지 않았습니다'));
+				return msg.channel.send(err('공지를 내리는 것이 허용되지 않았습니다'));
 			
 			const args = msg.content.split(/\s+/);
 			const idx = args[1];
@@ -655,7 +655,7 @@ bridge.on('message', async msg => {
 				if(post.content)
 					for(var item of JSON.parse(post.content))
 						if(item.type == 'text')
-							title = strip(item.text, 32);
+							title = strip(item.text.replace(/(\r|\n)/g, ' '), 32);
 				if(post.poll)
 					title = post.poll.subject;
 				
@@ -686,7 +686,7 @@ bridge.on('message', async msg => {
 				if(post.content)
 					for(var item of JSON.parse(post.content))
 						if(item.type == 'text')
-							title = strip(item.text, 32);
+							title = strip(item.text.replace(/(\r|\n)/g, ' '), 32);
 				if(post.poll)
 					title = post.poll.subject;
 				
