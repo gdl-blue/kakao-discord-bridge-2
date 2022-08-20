@@ -39,7 +39,7 @@ const webhook = id => {
 	}
 };
 bridge.login(config.token);
-const { api, AuthApiClient, TalkClient, ChatBuilder, KnownChatType, ReplyContent } = require('node-kakao');
+const { DefaultConfiguration, util, api, AuthApiClient, TalkClient, ChatBuilder, KnownChatType, ReplyContent } = require('node-kakao');
 const print = p => console.log(p);
 const cfg = {
 	agent: 'android', 
@@ -63,6 +63,159 @@ const floorof = Math.floor;
 const randint = (s, e) => floorof(Math.random() * (e + 1 - s) + s);
 
 const lastID = {};
+
+var ws = null, sc = null, iv;
+var board = null;
+
+// 게시판 기능 (node-kakao v3에서 가져옴 저작권은 storycraft에게 라이선스는 MIT - https://github.com/storycraft/node-kakao/blob/stable/LICENSE)
+(function() {
+	var channel_post_struct_1 = (function() {
+		var exports = {};
+		exports.ChannelPost = exports.BoardEmotionType = exports.PostPermission = exports.PostType;
+		var PostType;
+		(function (PostType) {
+			PostType["TEXT"] = "TEXT";
+			PostType["POLL"] = "POLL";
+			PostType["FILE"] = "FILE";
+			PostType["IMAGE"] = "IMAGE";
+			PostType["VIDEO"] = "VIDEO";
+			PostType["SCHEDULE"] = "SCHEDULE";
+		})(PostType = exports.PostType || (exports.PostType = {}));
+		var PostPermission;
+		(function (PostPermission) {
+		})(PostPermission = exports.PostPermission || (exports.PostPermission = {}));
+		var BoardEmotionType;
+		(function (BoardEmotionType) {
+			BoardEmotionType["LIKE"] = "LIKE";
+		})(BoardEmotionType = exports.BoardEmotionType || (exports.BoardEmotionType = {}));
+		var ChannelPost;
+		(function (ChannelPost) {
+			let ContentType;
+			(function (ContentType) {
+				ContentType["TEXT"] = "text";
+				ContentType["MENTION"] = "user";
+				ContentType["EVERYONE_MENTION"] = "user_all";
+			})(ContentType = ChannelPost.ContentType || (ChannelPost.ContentType = {}));
+			let PollItemType;
+			(function (PollItemType) {
+				PollItemType["TEXT"] = "text";
+			})(PollItemType = ChannelPost.PollItemType || (ChannelPost.PollItemType = {}));
+		})(ChannelPost = exports.ChannelPost || (exports.ChannelPost = {}));
+	})();
+	
+	function parse(d) {
+		return JSON.parse(d.replace(/[:](\d{6,})([,]|[}])/g, ':"$1"$2'));
+	}
+	
+	class BaseBoardClient extends api.SessionWebClient {
+		fillCommentForm(form, content) {
+			let contentList = [];
+			if (typeof (content) === 'string') {
+				contentList.push({ type: 'text', text: content });
+			}
+			else {
+				if (typeof (content.text) === 'string') {
+					contentList.push({ type: 'text', text: content.text });
+				}
+				else if (content.text && content.text instanceof Array) {
+					contentList.push(...content.text);
+				}
+				if (content.emoticon)
+					form.sticon = util.JsonUtil.stringifyLoseless(content.emoticon.toJsonAttachment());
+			}
+			form.content = util.JsonUtil.stringifyLoseless(contentList);
+		}
+		fillFileMap(form, type, fileMap) {
+			form['original_file_names[]'] = Object.keys(fileMap);
+			form[`${type.toLowerCase()}_paths[]`] = Object.values(fileMap);
+		}
+		fillPostForm(form, template) {
+			form.object_type = template.object_type;
+			if (template.content) {
+				let contentList = [];
+				if (typeof (template.content) === 'string')
+					contentList.push({ text: template.content, type: channel_post_struct_1.ChannelPost.ContentType.TEXT });
+				else if (template.content instanceof Array)
+					contentList.push(...template.content);
+				form.content = util.JsonUtil.stringifyLoseless(contentList);
+			}
+			if (template.object_type === channel_post_struct_1.PostType.POLL && template.poll_content)
+				form.poll_content = util.JsonUtil.stringifyLoseless(template.poll_content);
+			if (template.object_type === channel_post_struct_1.PostType.IMAGE)
+				this.fillFileMap(form, channel_post_struct_1.PostType.IMAGE, template.images);
+			else if (template.object_type === channel_post_struct_1.PostType.VIDEO)
+				this.fillFileMap(form, channel_post_struct_1.PostType.VIDEO, template.vidoes);
+			else if (template.object_type === channel_post_struct_1.PostType.FILE)
+				this.fillFileMap(form, channel_post_struct_1.PostType.FILE, template.files);
+			else if (template.object_type === channel_post_struct_1.PostType.SCHEDULE)
+				form['schedule_content'] = util.JsonUtil.stringifyLoseless(template.schedule_content);
+			if (template.emoticon)
+				form.sticon = util.JsonUtil.stringifyLoseless(template.emoticon.toJsonAttachment());
+			if (template.scrap)
+				form['scrap'] = util.JsonUtil.stringifyLoseless(template.scrap);
+			form['notice'] = template.notice;
+		}
+	}
+
+	class ChannelBoardClient extends BaseBoardClient {
+		get Scheme() {
+			return 'https';
+		}
+		get Host() {
+			return 'talkmoim-api.kakao.com';
+		}
+		async requestPostList(channelId) {
+			return parse(await this.request('GET', `chats/${channelId.toString()}/posts`) + '');
+		}
+		async getPost(postId) {
+			return parse(await this.request('GET', `posts/${postId}`) + '');
+		}
+		async getPostEmotionList(postId) {
+			return parse(await this.request('GET', `posts/${postId}/emotions`) + '');
+		}
+		async getPostCommentList(postId) {
+			return parse(await this.request('GET', `posts/${postId}/comments`) + '');
+		}
+		async reactToPost(postId) {
+			return parse(await this.request('POST', `posts/${postId}/emotions`, { emotion: channel_post_struct_1.BoardEmotionType.LIKE }) + '');
+		}
+		async unreactPost(postId, reactionId) {
+			return parse(await this.request('DELETE', `posts/${postId}/emotions/${reactionId}`) + '');
+		}
+		async commentToPost(postId, content) {
+			let form = {};
+			this.fillCommentForm(form, content);
+			return parse(await this.request('POST', `posts/${postId}/comments`, form) + '');
+		}
+		async deleteComment(postId, commentId) {
+			return parse(await this.request('DELETE', `posts/${postId}/comments/${commentId}`) + '');
+		}
+		async createPost(channelId, template) {
+			let form = {};
+			this.fillPostForm(form, template);
+			return parse(await this.request('POST', `chats/${channelId.toString()}/posts`, form) + '');
+		}
+		async updatePost(postId, template) {
+			let form = {};
+			this.fillPostForm(form, template);
+			return parse(await this.request('PUT', `posts/${postId}`, form) + '');
+		}
+		async deletePost(postId) {
+			return parse(await this.request('DELETE', `posts/${postId}`) + '');
+		}
+		async setPostNotice(postId) {
+			return parse(await this.request('POST', `posts/${postId}/set_notice`) + '');
+		}
+		async unsetPostNotice(postId) {
+			return parse(await this.request('POST', `posts/${postId}/unset_notice`) + '');
+		}
+		async sharePostToChannel(postId) {
+			return parse(await this.request('POST', `posts/${postId}/share`) + '');
+		}
+	}
+	
+	global.ChannelBoardClient = ChannelBoardClient;
+})();
 
 function filter(u) {
 	/* if(u == system) return u + ' (사칭)';
@@ -101,6 +254,7 @@ function setupBypasser() {
 			if(sc.config) {
 				clearInterval(iv);
 				sc.requestMoreSettings();
+				sc.requestLessSettings();
 			}
 		}, 100);
 	})();
@@ -116,6 +270,60 @@ function setupBypasser() {
 if(config.force_real_profile) setupBypasser();
 else global.getRealProfile = id => null;
 
+function err(content) {
+	return new DJS11.RichEmbed()
+		.setColor('#5c4b43')
+		.setTitle('오류')
+		.setDescription(content);
+}
+
+function parseDate(d) {
+	var date = new Date(d);
+	var ret = '';
+	ret += date.getFullYear() + '년 ';
+	ret += date.getMonth() + 1 + '월 ';
+	ret += date.getDate() + '일 ';
+	const hr = date.getHours();
+	if(hr > 12) ret += '오후';
+	else ret += '오전';
+	ret += ' ';
+	ret += (hr > 12 ? hr - 12 : hr) + ':';
+	var m = date.getMinutes();
+	ret += (m < 10 ? '0' + m : m);
+	
+	return ret;
+}
+
+global.posts = [];
+
+function progress(val) {
+	if(val > 95) return '[`####################`]';
+	if(val > 90) return '[`###################-`]';
+	if(val > 85) return '[`##################--`]';
+	if(val > 80) return '[`#################---`]';
+	if(val > 75) return '[`################----`]';
+	if(val > 70) return '[`###############-----`]';
+	if(val > 65) return '[`##############------`]';
+	if(val > 60) return '[`#############-------`]';
+	if(val > 55) return '[`############--------`]';
+	if(val > 50) return '[`###########---------`]';
+	if(val > 45) return '[`##########----------`]';
+	if(val > 40) return '[`#########-----------`]';
+	if(val > 35) return '[`########------------`]';
+	if(val > 30) return '[`#######-------------`]';
+	if(val > 25) return '[`######--------------`]';
+	if(val > 20) return '[`#####---------------`]';
+	if(val > 15) return '[`####----------------`]';
+	if(val > 10) return '[`###-----------------`]';
+	if(val >  5) return '[`##------------------`]';
+	if(val >  0) return '[`#-------------------`]';
+	if(val > -1) return '[`--------------------`]';
+}
+
+function strip(str, ln) {
+	return (str.length > ln) ? str.slice(0, ln - 1) + '...' : str;
+}
+
 bridge.on('message', async msg => {
 	if(msg.author.bot || msg.webhookID) return;
 	if(msg.content && msg.content.startsWith('&')) return;
@@ -123,91 +331,158 @@ bridge.on('message', async msg => {
 	
 	for(var whi in webhooks) {
 		var wh = webhooks[whi];
-		if(wh.channelID == msg.channel.id) {
-			if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id))) {
-				// kakao.channelList.get(wh.chid).sendChat('** ' + msg.author.username + '이(가) 디스코드를 통해 메시지를 전송했읍니다 **').then(handle);
-				// return msg.reply2('[' + msg.author.username + ']허가된 멤버가 아니기 때문에 메시지가 카카오톡으로 전송되지 않았읍니다 (디스코드에서만 보려면 메시지 앞에 `&`를 붙이십시오)', 0);
-				return;
-			}
-			
-			var cnt = msg.content;
-			if(cnt && cnt.startsWith('*')) cnt = cnt.replace('*', '');
-			
-			var cntnt = r => (((r || '') + cnt) || '*');
-			var ref = null;
-			var reply = '';
-			
-			function handle(res) {
-				if(!res.success) return msg.reply2('메시지가 정상적으로 전송되지 않았읍니다 다시 시도해 주십시오 (' + res.status + ')', 0);
-				if(msg.content && msg.content.startsWith('*')) {
-					const ch = kakao.channelList.get(wh.chid);
-					if(['MultiChat'].includes(ch._channel.info.type)) {
-						// msg.reply2('실톡 그룹 채팅에서는 누가 메시지를 읽었는지 확인하는 기능을 지원하지 않습니다');
-						read.set(res.result.logId + '', { msg, nouser: 1, chat: res.result });
-						rc[res.result.logId + ''] = ch._channel.info.activeUserCount - 1;
-					} else read.set(res.result.logId + '', { msg, nouser: 0, chat: res.result });
-				}
-			}
-			
-			try {
-				if(msg.reference) {
-					if(msg.attachments.size) {
-						msg.reply2('[경고!] 답장 메시지에 첨부파일을 추가할 수 없습니다', 0);
-					}
-					if(!msg.attachments.size || msg.content) {
-						try {
-							ref = await msg.fetchReference();
-						} catch(e) {
-							ref = { content: '', id: '0', author: { username: '' } };
-						}
-						var fc = ref.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, ' '), _fc = fc;
-						if(fc.length > 30) fc = fc.slice(0, 30) + '...';
-						reply = (ref ? ('[' + ref.author.username + '의 메시지: ' + fc + ']\n ↳️ ') : '');
-						if(chats.has(ref.id)) {
-							kakao.channelList.get(wh.chid).sendChat(new ChatBuilder()
-								.append(new ReplyContent(chats.get(ref.id)))
-								.text(cntnt())
-								.build(KnownChatType.REPLY));
-						} else {
-							kakao.channelList.get(wh.chid).sendChat(cntnt(reply)).then(handle);
-						}
-					}
-				} else {
-					if(msg.attachments.size > 1) {
-						msg.reply2('[경고!] 첫 번째 첨부파일만 전송됩니다', 0);
-					}
-					if(msg.attachments.size) {
-						const att = msg.attachments.first();
-						if(!att.width) {
-							msg.reply2('[오류!] 사진만 보낼 수 있습니다', 0);
-						} else {
-							https.get(att.url, res => {
-								var d = '';
-								res.setEncoding('base64');
-								res.on('data', chunk => d += chunk);
-								res.on('end', () => {
-									kakao.channelList.get(wh.chid).sendMedia(KnownChatType.PHOTO, {
-										name: att.filename,
-										data: Buffer.from(d, 'base64'),
-										width: att.width,
-										height: att.height,
-										ext: path.parse(att.filename).ext.replace('.', ''),
-									}).then(res => {
-										handle(res);
-										if(msg.content && res.success) setTimeout(() => {
-											kakao.channelList.get(wh.chid).sendChat(msg.content).then(handle);
-										}, 1000);
-									});
-								});
-							});
-						}
-					} else kakao.channelList.get(wh.chid).sendChat(cntnt()).then(handle);
-				}
-			} catch(e) {
-				msg.reply2('메시지가 정상적으로 전송되지 않았읍니다 다시 시도해 주십시오', 0);
-			}
-			break;
+		if(wh.channelID != msg.channel.id) continue;
+		const kchid   = wh.chid;
+		const kch     = kakao.channelList.get(kchid);
+		const kchname = kch.getDisplayName();
+		const _users  = kch.getAllUserInfo();
+		const users   = {};
+		while(1) {
+			const item = _users.next();
+			if(item.done) break;
+			users[item.value.userId + ''] = item.value;
 		}
+		
+		// 게시판 목록
+		if(msg.content.toLowerCase().startsWith('!board')) {
+			const res = await board.requestPostList(kchid);
+			if(res.status) return msg.channel.send(err('게시판을 불러오지 못했습니다'));
+			global.posts = [];
+			const { posts } = res;
+			const embed = new DJS11.RichEmbed()
+				.setColor('#5c4b43')
+				.setTitle(strip(kchname, 250));
+			var n = 1;
+			for(var post of posts) {
+				global.posts.push(post);
+				var content = '게시글';
+				if(post.content)
+					for(var item of JSON.parse(post.content))
+						if(item.type == 'text')
+							content = item.text;
+				if(post.poll)
+					content = post.poll.subject;
+				if(post.object_type == 'POLL')
+					content = '투표: ' + content;
+				if(post.notice)
+					content = '[공지] ' + content;
+				embed.addField(n++ + '. ' + strip(content, 240), (users[post.owner_id] || { nickname: '작성자 불분명' }).nickname + ' • ' + parseDate(post.created_at) + ' • ' + '댓글 ' + post.comment_count);
+			}
+			msg.channel.send(embed);
+			return;
+		}
+		
+		// 게시글 보기
+		if(msg.content.toLowerCase().startsWith('!viewpost')) {
+			const idx = msg.content.split(/\s+/)[1];
+			if(!idx) return msg.channel.send(err('!board로 게시글 목록을 불러오고 번호를 지정해 주세요'));
+			const rawpost = posts[idx - 1];
+			if(!rawpost) return msg.channel.send(err('!board로 게시글 목록을 불러오고 올바른 번호를 지정해 주세요'));
+			const post = await board.getPost(rawpost.id);
+			if(post.status) return msg.channel.send(err('게시글을 불러오지 못했습니다'));
+			const embed = new DJS11.RichEmbed().setColor('#5c4b43');
+			var title = '게시글';
+			if(post.poll)
+				title = '투표: ' + post.poll.subject;
+			if(post.notice && !post.poll)
+				title = '공지';
+			embed.setTitle(strip(title, 250));
+			var content = '';
+			if(post.content)
+				for(var item of JSON.parse(post.content))
+					if(item.type == 'text')
+						content = item.text;
+			embed.setDescription(strip(content, 4090));
+			if(post.poll)
+				for(var item of post.poll.items) {
+					embed.addField(strip(item.title, 250), progress(item.user_count / post.poll.user_count * 100) + ' (' + item.user_count + ')');
+				}
+			msg.channel.send(embed).then(() => {
+				if(!post.comments.length) return;
+				const embed = new DJS11.RichEmbed()
+					.setColor('#5c4b43')
+					.setTitle('댓글 ' + post.comments.length + '개');
+				for(var item of post.comments) {
+					var content = '';
+					for(var itm of JSON.parse(item.content))
+						if(itm.type == 'text')
+							content = itm.text;
+					embed.addField(users[item.owner_id].nickname, strip(content, 1019));
+				}
+				msg.channel.send(embed);
+			});
+			return;
+		}
+		
+		if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id))) {
+			// kakao.channelList.get(wh.chid).sendChat('** ' + msg.author.username + '이(가) 디스코드를 통해 메시지를 전송했읍니다 **').then(handle);
+			// return msg.reply2('[' + msg.author.username + ']허가된 멤버가 아니기 때문에 메시지가 카카오톡으로 전송되지 않았읍니다 (디스코드에서만 보려면 메시지 앞에 `&`를 붙이십시오)', 0);
+			return;
+		}
+		
+		var cnt = msg.content;
+		if(cnt && cnt.startsWith('*')) cnt = cnt.replace('*', '');
+		
+		var cntnt = r => (((r || '') + cnt) || '*');
+		var ref = null;
+		var reply = '';
+		
+		function handle(res) {
+			if(!res.success) return msg.reply2('메시지가 정상적으로 전송되지 않았읍니다 다시 시도해 주십시오 (' + res.status + ')', 0);
+			if(msg.content && msg.content.startsWith('*'))
+				read.set(res.result.logId + '', { msg, nouser: 0, chat: res.result });
+		}
+		
+		if(msg.reference) {
+			if(msg.attachments.size) {
+				msg.reply2('[경고!] 답장 메시지에 첨부파일을 추가할 수 없습니다', 0);
+				if(!msg.content) return;
+			}
+			try {
+				ref = await msg.fetchReference();
+			} catch(e) {
+				ref = { content: '', id: '0', author: { username: '' } };
+			}
+			var fc = ref.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, ' '), _fc = fc;
+			if(fc.length > 30) fc = fc.slice(0, 30) + '...';
+			reply = (ref ? ('[' + ref.author.username + '의 메시지: ' + fc + ']\n ↳️ ') : '');
+			if(chats.has(ref.id))
+				kakao.channelList.get(wh.chid).sendChat(new ChatBuilder()
+					.append(new ReplyContent(chats.get(ref.id)))
+					.text(cntnt())
+					.build(KnownChatType.REPLY));
+			else
+				kakao.channelList.get(wh.chid).sendChat(cntnt(reply)).then(handle);
+		} else {
+			if(msg.attachments.size > 1)
+				msg.reply2('[경고!] 첫 번째 첨부파일만 전송됩니다', 0);
+			if(!msg.attachments.size)
+				return kakao.channelList.get(wh.chid).sendChat(cntnt()).then(handle);
+			const att = msg.attachments.first();
+			if(!att.width)
+				return msg.reply2('[오류!] 사진만 보낼 수 있습니다', 0);
+			
+			https.get(att.url, res => {
+				var d = '';
+				res.setEncoding('base64');
+				res.on('data', chunk => d += chunk);
+				res.on('end', () => {
+					kakao.channelList.get(wh.chid).sendMedia(KnownChatType.PHOTO, {
+						name: att.filename,
+						data: Buffer.from(d, 'base64'),
+						width: att.width,
+						height: att.height,
+						ext: path.parse(att.filename).ext.replace('.', ''),
+					}).then(res => {
+						handle(res);
+						if(msg.content && res.success) setTimeout(() => {
+							kakao.channelList.get(wh.chid).sendChat(msg.content).then(handle);
+						}, 1000);
+					});
+				});
+			});
+		}
+		break;
 	}
 });
 
@@ -379,8 +654,7 @@ kakao.on('chat', async (data, channel) => {
 			whmsg: msg,
 		});
 		
-		var dc = data.chat;
-		if(msg) chats.set(msg.id, dc);
+		if(msg) chats.set(msg.id, data.chat);
 		
 		if(emoji) bridge.guilds.get(client(channel.channelId).guildID).deleteEmoji(emoji);
 	});
@@ -488,13 +762,24 @@ kakao.on('host_handover', (channel) => {
 });
 
 (async() => {
-    const api = await AuthApiClient.create(compname, uuid, cfg);
-    var res = await api.login({
+    const authapi = await AuthApiClient.create(compname, uuid, cfg);
+    var loginRes = await authapi.login({
         email, password, forced: true,
     });
+    if(!loginRes.success) throw Error('로그인 실패 (' + loginRes.status + ')');
+    var res = await kakao.login(loginRes.result);
     if(!res.success) throw Error('로그인 실패 (' + res.status + ')');
-    var res = await kakao.login(res.result);
-    if(!res.success) throw Error('로그인 실패 (' + res.status + ')');
+	
+	ws = api.createSessionWebClient(loginRes.result, Object.assign({ ...DefaultConfiguration }, cfg), 'https', 'katalk.kakao.com');
+	sc = new api.ServiceApiClient(ws);
+	iv = setInterval(async function() {
+		if(sc.config) {
+			clearInterval(iv);
+			sc.requestMoreSettings();
+			sc.requestLessSettings();
+		}
+	}, 100);
+	board = new ChannelBoardClient(await api.createWebClient('https', 'talkmoim-api.kakao.com'), loginRes.result, Object.assign({ ...DefaultConfiguration }, cfg));
 
     print('로그인 완료!');
 	
@@ -575,5 +860,3 @@ kakao.on('host_handover', (channel) => {
 		global.pfCache = {};
 	}, 180000);
 })();
-
-// setTimeout(() => process.exit(0), 1000 * randint(1, 3) * 60);
