@@ -102,8 +102,13 @@ var board = null;
 				PollItemType["TEXT"] = "text";
 			})(PollItemType = ChannelPost.PollItemType || (ChannelPost.PollItemType = {}));
 		})(ChannelPost = exports.ChannelPost || (exports.ChannelPost = {}));
+		
 		return exports;
 	})();
+	
+	const { ChannelPost, PostType } = channel_post_struct_1;
+	global.ChannelPost = ChannelPost;
+	global.PostType = PostType;
 	
 	function parse(d) {
 		return LosslessJSON.parse(d, (key, value) => {
@@ -147,8 +152,8 @@ var board = null;
 					contentList.push(...template.content);
 				form.content = util.JsonUtil.stringifyLoseless(contentList);
 			}
-			if (template.object_type === channel_post_struct_1.PostType.POLL && template.poll_content)
-				form.poll_content = util.JsonUtil.stringifyLoseless(template.poll_content);
+			// if (template.object_type === channel_post_struct_1.PostType.POLL && template.poll)
+			// 	form.poll = util.JsonUtil.stringifyLoseless(template.poll);
 			if (template.object_type === channel_post_struct_1.PostType.IMAGE)
 				this.fillFileMap(form, channel_post_struct_1.PostType.IMAGE, template.images);
 			else if (template.object_type === channel_post_struct_1.PostType.VIDEO)
@@ -445,7 +450,7 @@ bridge.on('message', async msg => {
 		}
 		
 		// 게시글 보기
-		if(msg.content.toLowerCase().startsWith('!viewpost')) {
+		if(msg.content.toLowerCase().startsWith('!viewpost ')) {
 			if(['OD', 'OM'].includes(kch._channel.info.type))
 				return msg.channel.send(err('오픈채팅은 게시판 기능을 지원하지 않습니다'));
 			
@@ -507,7 +512,7 @@ bridge.on('message', async msg => {
 		}
 		
 		// 댓글 달기
-		if(msg.content.toLowerCase().startsWith('!comment')) {
+		if(msg.content.toLowerCase().startsWith('!comment ')) {
 			if(['OD', 'OM'].includes(kch._channel.info.type))
 				return msg.channel.send(err('오픈채팅은 게시판 기능을 지원하지 않습니다'));
 			if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id)))
@@ -522,7 +527,10 @@ bridge.on('message', async msg => {
 			} catch(e) {}
 			if(!rawpost) return msg.channel.send(err('!board로 게시글 목록을 불러오고 올바른 번호를 지정해 주세요'));
 			const post = await board.getPost(rawpost.id);
-			board.commentToPost(post.id, args.slice(2, 99999999999).join(' ')).then(() => {
+			board.commentToPost(post.id, args.slice(2, 99999999999).join(' ')).then(res => {
+				if(res.status)
+					return msg.channel.send(err(res.error_message || '카카오톡 내부 오류'));
+				
 				var title = '게시글';
 				if(post.content)
 					for(var item of JSON.parse(post.content))
@@ -538,7 +546,7 @@ bridge.on('message', async msg => {
 		}
 		
 		// 좋아요
-		if(msg.content.toLowerCase().startsWith('!like')) {
+		if(msg.content.toLowerCase().startsWith('!like ')) {
 			if(['OD', 'OM'].includes(kch._channel.info.type))
 				return msg.channel.send(err('오픈채팅은 게시판 기능을 지원하지 않습니다'));
 			if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id)))
@@ -555,6 +563,9 @@ bridge.on('message', async msg => {
 			const post = await board.getPost(rawpost.id);
 			if(post.my_emotion) return msg.channel.send(err('이미 좋아요 표시헀습니다'));
 			board.reactToPost(post.id).then(res => {
+				if(res.status)
+					return msg.channel.send(err(res.error_message || '카카오톡 내부 오류'));
+				
 				var title = '게시글';
 				if(post.content)
 					for(var item of JSON.parse(post.content))
@@ -570,7 +581,7 @@ bridge.on('message', async msg => {
 		}
 		
 		// 좋아요 취소
-		if(msg.content.toLowerCase().startsWith('!unlike')) {
+		if(msg.content.toLowerCase().startsWith('!unlike ')) {
 			if(['OD', 'OM'].includes(kch._channel.info.type))
 				return msg.channel.send(err('오픈채팅은 게시판 기능을 지원하지 않습니다'));
 			if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id)))
@@ -587,6 +598,9 @@ bridge.on('message', async msg => {
 			const post = await board.getPost(rawpost.id);
 			if(!post.my_emotion) return msg.channel.send(err('좋아요 표시하지 않았습니다'));
 			board.unreactPost(post.id).then(res => {
+				if(res.status)
+					return msg.channel.send(err(res.error_message || '카카오톡 내부 오류'));
+				
 				var title = '게시글';
 				if(post.content)
 					for(var item of JSON.parse(post.content))
@@ -602,7 +616,7 @@ bridge.on('message', async msg => {
 		}
 		
 		// 공지 등록하기
-		if(msg.content.toLowerCase().startsWith('!setnotice')) {
+		if(msg.content.toLowerCase().startsWith('!setnotice ')) {
 			if(['OD', 'OM'].includes(kch._channel.info.type))
 				return msg.channel.send(err('오픈채팅은 게시판 기능을 지원하지 않습니다'));
 			if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id)))
@@ -619,6 +633,9 @@ bridge.on('message', async msg => {
 			const post = await board.getPost(rawpost.id);
 			if(post.notice) return msg.channel.send(err('이미 공지글입니다'));
 			board.setPostNotice(post.id).then(res => {
+				if(res.status)
+					return msg.channel.send(err(res.error_message || '카카오톡 내부 오류'));
+				
 				var title = '게시글';
 				if(post.content)
 					for(var item of JSON.parse(post.content))
@@ -634,7 +651,7 @@ bridge.on('message', async msg => {
 		}
 		
 		// 공지 내리기
-		if(msg.content.toLowerCase().startsWith('!denotice')) {
+		if(msg.content.toLowerCase().startsWith('!denotice ')) {
 			if(['OD', 'OM'].includes(kch._channel.info.type))
 				return msg.channel.send(err('오픈채팅은 게시판 기능을 지원하지 않습니다'));
 			if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id)))
@@ -651,6 +668,9 @@ bridge.on('message', async msg => {
 			const post = await board.getPost(rawpost.id);
 			if(!post.notice) return msg.channel.send(err('공지글이 아닙니다'));
 			board.unsetPostNotice(post.id).then(res => {
+				if(res.status)
+					return msg.channel.send(err(res.error_message || '카카오톡 내부 오류'));
+				
 				var title = '게시글';
 				if(post.content)
 					for(var item of JSON.parse(post.content))
@@ -666,7 +686,7 @@ bridge.on('message', async msg => {
 		}
 		
 		// 게시글을 채팅방에 공유하기
-		if(msg.content.toLowerCase().startsWith('!share')) {
+		if(msg.content.toLowerCase().startsWith('!share ')) {
 			if(['OD', 'OM'].includes(kch._channel.info.type))
 				return msg.channel.send(err('오픈채팅은 게시판 기능을 지원하지 않습니다'));
 			if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id)))
@@ -682,6 +702,9 @@ bridge.on('message', async msg => {
 			if(!rawpost) return msg.channel.send(err('!board로 게시글 목록을 불러오고 올바른 번호를 지정해 주세요'));
 			const post = await board.getPost(rawpost.id);
 			board.sharePostToChannel(post.id).then(res => {
+				if(res.status)
+					return msg.channel.send(err(res.error_message || '카카오톡 내부 오류'));
+				
 				var title = '게시글';
 				if(post.content)
 					for(var item of JSON.parse(post.content))
@@ -691,6 +714,64 @@ bridge.on('message', async msg => {
 					title = post.poll.subject;
 				
 				msg.reply2(title + ' 공유 완료');
+			});
+			
+			return;
+		}
+		
+		// 글쓰기
+		if(msg.content.toLowerCase().startsWith('!post')) {
+			if(['OD', 'OM'].includes(kch._channel.info.type))
+				return msg.channel.send(err('오픈채팅은 게시판 기능을 지원하지 않습니다'));
+			if(!((allowed_senders[msg.channel.id] || []).includes(msg.author.id)))
+				return msg.channel.send(err('공지를 등록하는 것이 허용되지 않았습니다'));
+			
+			const pattern = msg.content
+				.replace(/\r\n/g, '\n')
+				.replace(/\r/g, '\n')
+				.match(/^[!]post\s*(noticepoll|noticetext|notice|poll|text|)(\s+|\n)((.|\n)*)$/i);
+			if(!pattern) return msg.channel.send(err('명령어를 형식에 맞게 호출해주세요'));
+			const _type = pattern[1].toUpperCase();
+			const notice = _type.startsWith('NOTICE');
+			const type = _type.replace('NOTICE', '') || 'TEXT';
+			const content = pattern[3] || '(내용 없음)';
+			
+			const template = {
+				object_type: type,
+				notice,
+				content,
+			};
+			
+			if(type == 'POLL') {
+				template.content = '';
+				var items = content.split('\n');
+				var subject = items[0];
+				items.splice(0, 1);
+				var flags = subject.match(/^(([+]|[-]|[*])*)/)[0];
+				subject = subject.replace(flags, '');
+				
+				template.poll = {
+					subject,
+					secret: flags.includes('-'),
+					items: [],
+					item_type: 'text',
+					item_addable: flags.includes('+'),
+					multi_select: flags.includes('*'),
+				};
+				
+				for(var item of items) {
+					template.poll.items.push({
+						title: item,
+					});
+				}
+				
+				if(template.poll.items.length < 2)
+					return msg.channel.send(err('투표 항목 수가 너무 적습니다'));
+			}
+			
+			board.createPost(kchid, template).then(res => {
+				if(res.status)
+					return msg.channel.send(err(res.error_message || '카카오톡 내부 오류'));
 			});
 			
 			return;
@@ -1097,6 +1178,7 @@ kakao.on('host_handover', (channel) => {
 	
 	setInterval(async () => {
 		for(var cid in lastID) {
+			if(!lastID[cid]) continue;
 			var channel = cl.find(item => item.channelId+'' == cid);
 			if(!channel) continue;
 			var res = (await channel.getChatListFrom(lastID[cid])).result;
