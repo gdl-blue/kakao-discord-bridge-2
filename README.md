@@ -3,6 +3,8 @@
 
 ** 본계정 말고 부계정 사용을 권장한다.**
 
+직접적으로 사용하는 라이브러리는 node-kakao와 discord.js 뿐이다.
+
 ## 쓰는 방법
 - 도스창을 켜고 `npm i node-kakao`, `npm i discord.js@11.6.3`을 차례로 친다.
 - [이 모듈](https://github.com/gdl-blue/discord.js-v11-reborn)을 내려받아 node_modules에 djs11 디렉토리를 만들어서 거기에 저장한다.
